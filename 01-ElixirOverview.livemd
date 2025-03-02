@@ -1,0 +1,1244 @@
+<!-- livebook:{"file_entries":[{"name":"Link-list-operation-o-notation.png","type":"attachment"}]} -->
+
+# Elixir Concept Overview
+
+```elixir
+Mix.install([
+  {:veritaserum, "~> 0.2.2"},
+  {:jason, "~> 1.4"}
+])
+```
+
+## Introductions
+
+### About Elixir
+
+Elixir is a programming language built on top of Erlang. It runs on Erlang VM (BEAM). It is a dynamic type language with functional programming features.
+
+You can check about the Elixir use case on the following web pages:
+
+* https://elixir-lang.org/cases.html
+* https://www.quora.com/What-are-some-good-uses-for-the-Elixir-programming-language
+
+<!-- livebook:{"break_markdown":true} -->
+
+### About Veritaserum
+
+I have been learning the concept of Elixir by analyzing a library called Veritaserum. It is a library to computes sentiment analysis by using the AFINN method. How does it work? It uses a collection of words, with a score on each word. A score less than 0 represents a negative sentiment, meanwhile a score greater than 0 represents a positive sentiment.
+
+As an example, the sentence “The build quality, sturdiness and grip of the dumbbell is great.” will produce a score of five. It is because it contains the words “quality” and “great” which have scores of two and three, respectively.
+
+You can check the repository by visiting this link: https://github.com/uesteibar/veritaserum
+
+```elixir
+Veritaserum.analyze("The build quality, sturdiness and grip of the dumbbell is great.", return: :score_and_marks )
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+{5,
+ [
+   {:neutral, 0, "the"},
+   {:neutral, 0, "build"},
+   {:word, 2, "quality"},
+   {:neutral, 0, "sturdiness"},
+   {:neutral, 0, "and"},
+   {:neutral, 0, "grip"},
+   {:neutral, 0, "of"},
+   {:neutral, 0, "the"},
+   {:neutral, 0, "dumbbell"},
+   {:neutral, 0, "is"},
+   {:word, 3, "great"}
+ ]}
+```
+
+### About This Learning Notes
+
+This learning note is created from Elixir's features and concepts used in the Veritaserum library. The library is quite small and straightforward, making it perfect for language learning. I would recommend the audience to read the code in the repository first before continuing reading this note.
+
+This note is created by using [Livebook](https://livebook.dev/). It is a web application for writing interactive and collaborative code notebooks.
+
+## Module & Function
+
+### Module
+
+In functional programming, the application is made of collections of functions. Module allows us to organize the code by grouping related functions in one place.
+
+Based on the [community style guide](https://github.com/christopheradams/elixir_style_guide?tab=readme-ov-file#modules), the module name should use `CamelCase` and keep acronyms like HTTP, RFC, and XML in uppercase.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+defmodule Foo do
+  def foo, do: "foo"
+end
+```
+
+<!-- livebook:{"break_markdown":true} -->
+
+#### Module Hierarchy
+
+It is possible to create a nested module (a module inside another module).
+
+In the code sample below, function `foo_bar` calls function `bar` defined in `Bar` module without using the full path: `Foo.Bar.bar`. When nesting, Elixir automatically creates an **alias** to the inner module, allowing the second module `Foo.Bar` to be accessed as `Bar`.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+defmodule Foo do
+  defmodule Bar do
+    def bar, do: "bar"
+  end
+
+  def foo, do: "foo"
+
+  # full path Foo.Bar.bar is not required.
+  def foo_bar, do: foo() <> Bar.bar()
+end
+```
+
+<!-- livebook:{"break_markdown":true} -->
+
+If the `Foo.Bar` module is moved somewhere else, the references to `Bar` in the `Foo` module need to be updated to the fully-qualified name (`Foo.Bar`) or an alias has to be explicitly set in the `Foo` module with the help of `alias/2` (this is called arity, check the arity section).
+
+Module name may contain dot (".") and the convention is to use that dot to establish a hierarchical structure.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+defmodule Foo do
+  # similar with: alias Foo.Bar, as: Bar
+  alias Foo.Bar
+
+  def foo, do: "foo"
+
+  def foo_bar, do: foo() <> Bar.bar()
+end
+
+defmodule Foo.Bar do
+  def bar, do: "bar"
+end
+```
+
+<!-- livebook:{"break_markdown":true} -->
+
+### Use & Import
+
+Use the `import` keyword to call all the public functions from a certain module without providing the module path.
+
+`use` keyword behaves similarly to `import` keyword, except that the imported module will be allowed to inject and run any code to the callee module. In the code snippet, the `ExUnit.Case` module injects all the dependencies to run unit testing into the `VeritaserumTest` module.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# test/veritaserum_test.exs
+
+defmodule VeritaserumTest do
+  use ExUnit.Case
+
+  doctest Veritaserum
+
+  import Veritaserum
+
+  describe "when text has no relevant word" do
+    @text "I build Veritaserum"
+
+    test "sentimental value is 0" do
+      # no need to use a module path like Veritaserum.analyze
+      assert analyze(@text) == 0
+    end
+  end
+end
+```
+
+Further reading:
+
+* https://hexdocs.pm/elixir/main/alias-require-and-import.html
+
+<!-- livebook:{"break_markdown":true} -->
+
+### Function
+
+Named functions are defined inside a module using the `def` keyword. Based on the style guide, we should use `snake_case` for the function name. There is no `return` keyword. The last value in the logical block will be returned.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+defmodule Foo do
+  def hello do
+    "Goodbye"
+  end
+end
+
+Foo.hello
+# "Goodbye"
+```
+
+There are naming conventions usually applied to the end of the function name:
+
+* ! - Will raise an exception if the function encounters an error.
+* ? - Used to show that the function will return a boolean value, either true or false.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/evaluator.ex
+
+facet_mapping =
+  "#{__DIR__}/../config/facets/#{facet}.json"
+  |> File.read!()
+  |> Jason.decode!()
+```
+
+<!-- livebook:{"break_markdown":true} -->
+
+We can also make a private function by using `defp` keyword. A private function is only accessible within the same module.
+
+If our function body only spans one line, we can shorten it further with `do:` keyword, omitting the function body.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/veritaserum.ex
+
+defmodule Veritaserum do
+  defp mark_list([], result), do: result
+end
+```
+
+<!-- livebook:{"break_markdown":true} -->
+
+#### Anonymous Function
+
+Use `fn` keyword to define an anonymous function, and write the function body after the `->` symbol.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/evaluator.ex
+
+|> Enum.each(fn facet ->
+    # ...
+   end)
+```
+
+```elixir
+add_one = fn x -> x + 1 end
+dbg(add_one.(1))
+
+# You might notice that &1 is used in the below example. 
+# That’s called a value placeholder, and it identifies the nth argument of the function.
+add_one = &(&1 + 1)
+dbg(add_one.(1))
+
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+[OneDrive/Livebook/ElixirOverview.livemd#cell:uqkqwmxwhzos5wyr:2: (file)]
+add_one.(1) #=> 2
+
+[OneDrive/Livebook/ElixirOverview.livemd#cell:uqkqwmxwhzos5wyr:7: (file)]
+add_one.(1) #=> 2
+
+
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+2
+```
+
+#### Capture Operator
+
+Capture operator (&) can turn a function into an anonymous functions which can be passed as arguments to other function or be bound to a variable.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/veritaserum.ex
+
+  def analyze(input) when is_list(input) do
+    input
+    |> Stream.map(&analyze/1)
+    |> Enum.to_list()
+  end
+```
+
+## Documentation
+
+### Module Documentation
+
+Module documentation can be created after the module definition by using `@moduledoc`. The documentation in Elixir supports Markdown.
+https://hexdocs.pm/elixir/writing-documentation.html
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/veritaserum.ex
+
+defmodule Veritaserum do
+  @moduledoc """
+  Sentiment analisis based on AFINN-165, emojis and some enhancements.
+  Also supports:
+  - emojis (❤️, 😱...)
+  - boosters (*very*, *really*...)
+  - negators (*don't*, *not*...).
+  """
+```
+
+<!-- livebook:{"break_markdown":true} -->
+
+### Function Documentation
+
+We can create documentation for functions by using `@doc`.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/veritaserum.ex
+
+@doc """
+Returns a sentiment value for the given text
+
+    iex> Veritaserum.analyze(["I ❤️ Veritaserum", "Veritaserum is really awesome"])
+    [3, 5]
+
+    iex> Veritaserum.analyze("I love Veritaserum")
+    3
+"""
+@spec analyze(String.t(), return: :score_and_marks) :: {number(), [{atom, number, String.t()}]}
+def analyze(input, return: :score_and_marks) do
+  list_with_marks = get_list_with_marks(input)
+  score = get_score(list_with_marks)
+
+  {score, list_with_marks}
+end
+```
+
+#### Doctest
+
+It is a best practice to provide an example inside the function documentation. The example code can be validated using a `doctest` when running a test. It ensures the documentation keeps updated otherwise the test will fail.
+
+`Doctests` are specified by an indentation of four spaces followed by the `iex>` prompt in a documentation string. `IEx` is an interactive Elixir shell. The test will be run in `IEx` and the result from the documentation will be compared with the actual result.
+
+To enable `doctest`, call `doctest Veritaserum` command in the test case.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# test/veritaserum_test.exs
+
+defmodule VeritaserumTest do
+  use ExUnit.Case
+
+  doctest Veritaserum
+
+  import Veritaserum
+```
+
+Reference:
+
+* https://hexdocs.pm/ex_unit/ExUnit.DocTest.html
+* https://hexdocs.pm/elixir/docs-tests-and-with.html
+* https://hexdocs.pm/iex/IEx.html
+
+<!-- livebook:{"break_markdown":true} -->
+
+#### Function Argument Documentation
+
+To create documentation for the function argument, we can use the function head. From the code snippet below, the function head is the first `evaluate_*` function implementation which does nothing. It informs us that the function argument accepts `word_or_emoji`.
+
+https://hexdocs.pm/elixir/writing-documentation.html#function-arguments
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+@doc """
+Evaluates if a word/emoji is a **#{facet}** and returns value.
+Otherwise returns `nil`.
+
+    Veritaserum.Evaluator.evaluate_#{facet}("very")
+    Veritaserum.Evaluator.evaluate_#{facet}("can't")
+    Veritaserum.Evaluator.evaluate_#{facet}("afraid")
+"""
+def unquote(:"evaluate_#{facet}")(word_or_emoji)
+
+Enum.each(facet_mapping, fn {word, value} ->
+  def unquote(:"evaluate_#{facet}")(unquote(word)), do: unquote(value)
+end)
+
+def unquote(:"evaluate_#{facet}")(_), do: nil
+```
+
+<!-- livebook:{"break_markdown":true} -->
+
+![](files/function-argument-hint.png)
+The text editor will show that `evaluate_negator` function accepts `word_or_emoji` as the argument.
+
+<!-- livebook:{"break_markdown":true} -->
+
+### ExDoc
+
+`ExDoc` tool can be used to create HTML and EPUB documentation for the Elixir project. It will convert all the documentation in the code into a documentation page.
+
+* https://github.com/elixir-lang/ex_doc
+* https://hexdocs.pm/veritaserum/Veritaserum.html
+
+## Typespecs - Spec
+
+Sometimes it is difficult to find about the type of the argument or returned function because Elixir is a dynamic type language. Similar with other dynamic type language, we can add annotation to define the type of function argument and returns value. It is useful for:
+
+* improving code readability.
+* maintaining documentation.
+* enabling static analysis tools like Dialyzer.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/veritaserum.ex
+
+@spec analyze(list(String.t()) | String.t()) :: list(integer) | integer
+def analyze(input) when is_list(input) do
+  input
+  |> Stream.map(&analyze/1)
+  |> Enum.to_list()
+end
+```
+
+The code snippet above shows `analyze` function accepting one parameter `input` which can be a list of strings or a single string and can return a list of integers or a single integer value.
+
+References:
+
+* https://hexdocs.pm/elixir/typespecs.html
+* https://piembsystech.com/understanding-typespecs-in-elixir-programming-language
+
+## Data Types
+
+### List
+
+[List](https://hexdocs.pm/elixir/lists-and-tuples.html) is a datatype that can contain ordered heterogeneous elements. Elixir uses linked lists under the hood for their linear data structures. List implements the [Enumerable protocol](https://hexdocs.pm/elixir/Enumerable.html).
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/evaluator.ex
+
+defmodule Veritaserum.Evaluator do
+  @moduledoc """
+  Evaluates words, boosters, negators and emoticons.
+  """
+
+  ["word", "emoticon", "negator", "booster"]
+```
+
+![](files/Link-list-operation-o-notation.png)
+
+Linked lists excel at prepending elements, but struggle with random access and appending. This aligns well with common patterns in functional programming, where we often build lists incrementally from the front using recursion. (more detail on the recursion section)
+
+Reference:
+
+* https://thelinuxcode.com/why-elixir-uses-linked-lists-an-expert-dive
+* https://www.bomberbot.com/programming/why-elixir-uses-linked-lists-an-in-depth-look
+* https://expertbeacon.com/why-elixir-chose-linked-lists-for-core-data-structures
+
+#### Head & Tail
+
+There are two components of a list, head and tail. The head is the first node in the list, and the tail is the rest of the nodes.
+
+The code snippet below shows a function with a list as a parameter. The function requires reading the head and the tail of the list, which uses pattern matching to access them. (more about pattern matching in the pattern matching section)
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/veritaserum.ex
+
+defmodule Veritaserum do
+  # ...
+  defp mark_list([head | tail]) do
+    # ...
+  end
+  # ...
+end
+```
+
+```elixir
+new = 0
+list = [1, 2, 3]
+
+# combine the head and tail into a new list using the con (|) operator.
+# dbg is a build in function to print a debug log.
+dbg([new | list]) 
+
+# combine two lists using the concat function from Enum module.
+new_list = Enum.concat(list, [4,5,6]) 
+dbg(new_list)
+
+# accessing list node by node position.
+dbg(Enum.at(new_list, 3)) 
+
+# we just want the head, ignore the tail.
+[head | _] = ["word", "emoticon", "negator", "booster"] 
+dbg(head)
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+[OneDrive/Livebook/ElixirOverview.livemd#cell:vfip5cgnaeq2npty:6: (file)]
+[new | list] #=> [0, 1, 2, 3]
+
+[OneDrive/Livebook/ElixirOverview.livemd#cell:vfip5cgnaeq2npty:10: (file)]
+new_list #=> [1, 2, 3, 4, 5, 6]
+
+[OneDrive/Livebook/ElixirOverview.livemd#cell:vfip5cgnaeq2npty:13: (file)]
+Enum.at(new_list, 3) #=> 4
+
+[OneDrive/Livebook/ElixirOverview.livemd#cell:vfip5cgnaeq2npty:17: (file)]
+head #=> "word"
+
+
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+"word"
+```
+
+### Map
+
+[Map](https://hexdocs.pm/elixir/Map.html) is a key/value data type. Like list, map also implements the [Enumerable protocol](https://hexdocs.pm/elixir/Enumerable.html). Maps represented by two different implementations based on their size:
+
+* Maps having key-value pairs less than or equal to 32 are called small maps or flat maps and they are implemented based on a sorted tuple structure ([ref](https://arunramgt.medium.com/elixir-internal-data-representation-of-small-maps-3673036b40f)).
+* Maps having key-value pairs greater than 32 are called large maps or hash maps and they are implemented based on a persistent Hash Array Mapped Trie data structure ([ref](https://arunramgt.medium.com/elixir-internal-representation-of-large-maps-hamt-618e1275938d)).
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/evaluator.ex
+
+facet_mapping =
+      "#{__DIR__}/../config/facets/#{facet}.json"
+      |> File.read!()
+      |> Jason.decode!()
+
+    @doc """
+    Returns a list of words/emojis which affect **#{facet}** sentiment.
+
+        Veritaserum.Evaluator.#{facet}_list()
+    """
+    def unquote(:"#{facet}_list")(),
+      do: unquote(Map.keys(facet_mapping))
+```
+
+The code snippet above shows a code that will open a file and do JSON decoding. The result `facet_mapping` is a map where the key is the facet string, and the value is the sentiment score.
+
+```elixir
+# to create map, we can use %{}
+map_1 = %{a: 1, b: 2}
+
+# print the keys of the map.
+dbg(Map.keys(map_1))
+
+# combining map_1 and map_2
+map_2 = %{c: 3, d: 5}
+dbg(Enum.concat(map_1, map_2))
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+[OneDrive/Livebook/ElixirOverview.livemd#cell:mhvbmkkiofynhrei:5: (file)]
+Map.keys(map_1) #=> [:b, :a]
+
+[OneDrive/Livebook/ElixirOverview.livemd#cell:mhvbmkkiofynhrei:9: (file)]
+Enum.concat(map_1, map_2) #=> [b: 2, a: 1, c: 3, d: 5]
+
+
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+[b: 2, a: 1, c: 3, d: 5]
+```
+
+### Tuple
+
+Tuple is intended as a fixed-size container for multiple elements.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/veritaserum.ex
+
+  def analyze(input, return: :score_and_marks) do
+    list_with_marks = get_list_with_marks(input)
+    score = get_score(list_with_marks)
+
+    {score, list_with_marks} # this is a tuple.
+  end
+```
+
+A tuple is usually used for returning a multiple return value from a function.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/veritaserum.ex
+
+def analyze(input) do
+    {score, _} = analyze(input, return: :score_and_marks)
+
+    score
+end
+```
+
+The code snippet above shows how we can call functions with multiple return values. In this case, we only want the `score` value.
+
+<!-- livebook:{"break_markdown":true} -->
+
+### Atoms
+
+Atoms are constants whose values are their name. They are often useful for enumerating distinct values. We can create atom by using the following syntax `:atom_name`. Reference: https://hexdocs.pm/elixir/Atom.html
+
+```elixir
+dbg(:ok)    # A commonly used atom representing success.
+dbg(:error) # A commonly used atom representing error.
+dbg(:my_atom)
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+[OneDrive/Livebook/ElixirOverview.livemd#cell:roxgdzjnev6katcl:1: (file)]
+:ok #=> :ok
+
+[OneDrive/Livebook/ElixirOverview.livemd#cell:roxgdzjnev6katcl:2: (file)]
+:error #=> :error
+
+[OneDrive/Livebook/ElixirOverview.livemd#cell:roxgdzjnev6katcl:3: (file)]
+:my_atom #=> :my_atom
+
+
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+:my_atom
+```
+
+#### Atoms Usage
+
+Common atom usage:
+
+* Identifier or tags: `:negator, :booster, :emoticon, :word`.
+* Pattern matching (more about it in the pattern matching section).
+* As a key in the keyword list data type.
+
+Other usage: https://www.geniokua.com/post/working-with-atoms-in-elixir/#usage-of-atoms
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/veritaserum.ex
+
+defp analyze_mark({type, score, _}) do
+    case type do
+      :word -> score
+      :emoticon -> score
+      _ -> 0
+    end
+  end
+```
+
+The code snippet above shows atoms are being used as a pattern matching in `case` control structure (more about control structure in the control structure section).
+
+#### Atoms Limitation
+
+Atoms are stored in a global table, and each atom is unique. It means that atoms are not garbage collected. It is adviced not to create a dynamic atom.
+
+<!-- livebook:{"break_markdown":true} -->
+
+### Keyword List
+
+[Keyword lists](https://hexdocs.pm/elixir/main/keywords-and-maps.html#keyword-lists) are simply lists. In particular, they are lists consisting of 2-item tuples where the first element (the key) is an atom and the second element can be any value. There are two ways of creating a keyword list as shown below. The right one is a simpler way to create a keyword list.
+
+```elixir
+[{:key1, "value1"}, {:key2, "value2"}] == [key1: "value1", key2: "value2"]
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+true
+```
+
+In the code snippet below, the keyword list is used as the last function parameter. In this case, the bracket can be omitted. This is an example of using a keyword list in pattern matching.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/veritaserum.ex
+
+def analyze(input, return: :score_and_marks) do
+    list_with_marks = get_list_with_marks(input)
+    score = get_score(list_with_marks)
+
+    {score, list_with_marks}
+end
+```
+
+## Protocol
+
+Do you remember that list and map implement the Enumerable protocol? What is protocol? [Protocol](https://hexdocs.pm/elixir/Protocol.html) is a mechanism to achieve polymorphism in Elixir.
+
+We can use `defprotocol` to define the protocol definition, and use `defimpl` to implement the protocol for a type.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+#https://github.com/elixir-lang/elixir/blob/6a3301f237ad6dff6f66c9ded91426a23abfe757/lib/elixir/lib/enum.ex#L1-L231
+defprotocol Enumerable do
+  def reduce(enumerable, acc, fun)
+  def count(enumerable)
+  def member?(enumerable, element)
+  def slice(enumerable)
+end
+
+#https://github.com/elixir-lang/elixir/blob/6a3301f237ad6dff6f66c9ded91426a23abfe757/lib/elixir/lib/enum.ex#L4952-L4988
+defimpl Enumerable, for: List do
+  ...
+end
+
+defimpl Enumerable, for: Map do
+  ...
+end
+```
+
+## Pipe Operator
+
+The pipe operator puts the value of the expression on the left into the first argument of the function on the right. It makes writing a chain function call look cleaner.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/evaluator.ex
+
+defmodule Veritaserum.Evaluator do
+  ["word", "emoticon", "negator", "booster"]
+  |> Enum.each(fn facet ->
+    facet_mapping =
+      "#{__DIR__}/../config/facets/#{facet}.json"
+      |> File.read!()
+      |> Jason.decode!()
+```
+
+In the code snippet above two functions are being called by using the pipe operator:
+
+* `read!(path)` ([ref](https://hexdocs.pm/elixir/File.html#read!/1))
+* `decode!(input, opts \\ [])` ([ref](https://hexdocs.pm/jason/Jason.html#decode!/2))*
+
+*That is an example of declaring a function with a default argument. In this case, `opts` (optional parameter) by default is an empty keyword list (`\\ []`). In Elixir, a keyword list is used for defining optional parameters.
+
+## Metaprogramming
+
+Metaprogramming is the process of using code to write code. It gives us the ability to extend the language to fit our needs and dynamically change the code.
+
+Elixir uses compile-time metaprogramming. This essentially allows the modification of the source code before/during compile-time, meaning that the generated binary code is slightly different.
+
+[source code] -> [compilation] -> [binary] -> [Execution (run-time)] -> [Output]
+
+Learning resources:
+
+* https://pragprog.com/titles/cmelixir/metaprogramming-elixir/
+* https://curiosum.com/blog/elixir-trickery-using-macros-metaprogramming
+* https://kobrakai.de/kolumne/unquote
+* https://elixirschool.com/en/lessons/advanced/metaprogramming
+* https://blog.appsignal.com/2021/09/07/an-introduction-to-metaprogramming-in-elixir.html
+* https://serokell.io/blog/elixir-metaprogramming
+* https://www.youtube.com/watch?v=I0ZM-n_7fZM
+
+<!-- livebook:{"break_markdown":true} -->
+
+### Quote
+
+Just as a binary is the internal representation of a string, an Abstract Syntax Tree (AST) is the internal representation of code in Elixir. We use it as building blocks for compile-time constructs. In Elixir, AST is represented by tuples. These tuples contain three parts:
+
+* Atom — representing the name of the operation.
+* Metadata of the expression.
+* Arguments of the operation.
+
+We can use `quote` to see the AST information.
+
+```elixir
+quote do: 2 + 3 * 4
+
+# {
+#   :+,
+#   [context: Elixir, import: Kernel],
+#   [
+#     2,
+#     {
+#       :*,
+#       [context: Elixir, import: Kernel],
+#       [
+#         3,
+#         4
+#       ]
+#     }
+#   ]
+# }
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+{:+, [context: Elixir, imports: [{1, Kernel}, {2, Kernel}]],
+ [2, {:*, [context: Elixir, imports: [{2, Kernel}]], [3, 4]}]}
+```
+
+### Unquote
+
+To modify the AST, we can use `unquote` to inject code/values into the AST.
+
+Line 3 in the code below shows that the `denominator` is quoted, which gives an AST tuple to access the variable. Line 4, shows the `denominator` is unquoted, which gives the value of the variable.
+
+```elixir
+denominator = 2
+
+dbg(quote do: divide(42, denominator))
+dbg(quote do: divide(42, unquote(denominator)))
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+[OneDrive/Livebook/ElixirOverview.livemd#cell:suxsyw2mmxvusmco:3: (file)]
+quote do
+  divide(42, denominator)
+end #=> {:divide, [], [42, {:denominator, [], Elixir}]}
+
+[OneDrive/Livebook/ElixirOverview.livemd#cell:suxsyw2mmxvusmco:4: (file)]
+quote do
+  divide(42, unquote(denominator))
+end #=> {:divide, [], [42, 2]}
+
+
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+{:divide, [], [42, 2]}
+```
+
+### Macro
+
+[Macros](https://elixirschool.com/en/lessons/advanced/metaprogramming#macros-2) is a function that accepts AST as the input and returns AST. `defmodule`, `def`, `use` are examples of macro that we have seen so far.
+
+Roughly speaking, **Elixir compiler first does an initial parsing of your source code into an AST**, and then does another run-through in which **macros are expanded**.
+
+Expanding macros is nothing more than **running macros on initially generated ASTs to transform them into different ASTs**.
+
+<!-- livebook:{"break_markdown":true} -->
+
+### Unquote Fragments
+
+[Unquote fragments](https://hexdocs.pm/elixir/Kernel.SpecialForms.html#quote/2-binding-and-unquote-fragments) provide an easy way to generate functions on the fly.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/evaluator.ex
+
+defmodule Veritaserum.Evaluator do
+  ["word", "emoticon", "negator", "booster"]
+  |> Enum.each(fn facet ->
+    facet_mapping =
+      "#{__DIR__}/../config/facets/#{facet}.json"
+      |> File.read!()
+      |> Jason.decode!()
+
+    def unquote(:"#{facet}_list")(), do: unquote(Map.keys(facet_mapping))
+    # ...
+  end)
+end
+```
+
+Let's try to demonstrate the code above with a simpler example. The AST will be expanded into another AST which creates functions to transform the color name to uppercase for each color name.
+
+```elixir
+defmodule Colours do
+  ["red", "blue", "green"]
+  |> Enum.each(fn colour ->
+    
+    def unquote(:"uppercase_#{colour}")(), do: String.upcase(unquote(colour))
+  end)
+end
+
+Colours.uppercase_blue()
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+"BLUE"
+```
+
+The same function can also be written with `macro`. Macro helps us to write the boilerplate code once, and re-use it in another module.
+
+```elixir
+defmodule ColoursV2 do
+  defmacro defColour(colour_list) do
+      Enum.map(colour_list, fn colour ->
+        quote do
+          def unquote(:"uppercase_#{colour}")(), do: String.upcase(unquote(colour))
+        end
+      end)
+  end
+end
+
+defmodule MyColour do
+  require ColoursV2
+
+  ColoursV2.defColour ["blue", "green"]
+
+  # This code below does not work because colour_list will be passed as AST.
+  # colour_list = ["blue", "green"]
+  # ColoursV2.defColour colour_list
+end
+
+MyColour.uppercase_blue()
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+"BLUE"
+```
+
+## Pattern Matching
+
+This expression `x = 1` in imperative programming language means assign x with value one (allocate or update memory for x). In declarative programming language (like Elixir), `x = 1` means x is equal to one (like an equals sign in algebra).
+
+```text
+𝐴 = 𝜋𝑟^2
+𝜋𝑟^2 = 𝐴
+```
+
+With that in mind, this expression is valid in Elixir. We can say it binds / labels `x` to 1. In the context of pattern matching, Elixir matches the values on the left hand with the values on the right hand.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+x = 1
+1 = x
+```
+
+Reference: https://hexdocs.pm/elixir/pattern-matching.html
+
+<!-- livebook:{"break_markdown":true} -->
+
+### List Pattern Matching
+
+This is an example of pattern matching in a list.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# This expression means bind/label head with the head from the list on the right,
+# and tail with the tail from the list on the right.
+[head | tail] = ["word", "emoticon", "negator", "booster"]
+["word", "emoticon", "negator", "booster"] = [head | tail]
+```
+
+<!-- livebook:{"break_markdown":true} -->
+
+### Tuple Pattern Matching
+
+This is an example of pattern matching in a tuple.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/veritaserum.ex
+
+def analyze(input) do
+    # analyze/2 function returns a tuple, because of that
+    # the left side of the expression needs to be a tuple too in order to match.
+    {score, _} = analyze(input, return: :score_and_marks)
+
+    score
+end
+```
+
+<!-- livebook:{"break_markdown":true} -->
+
+### Function Pattern Matching
+
+This is an example of pattern matching in functions. We have 3 functions with the same name. Which one will be called?
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/veritaserum.ex
+
+defmodule Veritaserum do
+  def analyze(input) when is_list(input) do
+    ...
+  end
+  
+  def analyze(input) do
+    ...
+  end
+
+  def analyze(input, return: :score_and_marks) do
+    ...
+  end
+  
+  ...
+end
+
+```
+
+<!-- livebook:{"break_markdown":true} -->
+
+### Guard
+
+Guards are a way to augment pattern matching with more complex checks.
+
+Reference: https://hexdocs.pm/elixir/main/patterns-and-guards.html#guards
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/veritaserum.ex
+
+defp apply_booster(word_value, booster) when word_value > 0, do: word_value + booster
+defp apply_booster(word_value, booster) when word_value < 0, do: word_value - booster
+defp apply_booster(word_value, _booster), do: word_value
+```
+
+<!-- livebook:{"break_markdown":true} -->
+
+### Arity
+
+The number of arguments the function is to be called with.
+
+Reference: https://www.educative.io/answers/what-is-function-arity-in-elixir
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/veritaserum.ex
+
+defmodule Veritaserum do
+  def analyze(input) when is_list(input) do # Veritaserum.analyze/1
+    input
+    |> Stream.map(&analyze/1) # capture operator transforming analyze function with one argument into anonymous function.
+    |> Enum.to_list()
+  end
+  
+  def analyze(input) do # Veritaserum.analyze/1
+    {score, _} = analyze(input, return: :score_and_marks)
+    score
+  end
+  
+  def analyze(input, return: :score_and_marks) do # Veritaserum.analyze/2
+    # ...
+  end
+  
+  # ...
+end
+```
+
+## Control Structure
+
+### Case
+
+To match against multiple patterns. Each case clause can match a pattern and execute the corresponding code.
+
+Reference: https://hexdocs.pm/elixir/main/case-cond-and-if.html#case
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/veritaserum.ex
+
+defp analyze_mark({type, score, _}) do
+  case type do
+    :word -> score
+    :emoticon -> score
+    _ -> 0
+  end
+end
+```
+
+<!-- livebook:{"break_markdown":true} -->
+
+### With
+
+Handy control for nested cases. If an expression fails to match, the non-matching value will be returned.
+
+Reference: https://elixirschool.com/en/lessons/basics/control_structures#with-3
+
+In the code snippet below, the evaluation will continue until the right expression does not match the left expression.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+defp mark_word(word) do
+  with {_, nil, _} <- {:negator, Evaluator.evaluate_negator(word), word},
+       {_, nil, _} <- {:booster, Evaluator.evaluate_booster(word), word},
+       {_, nil, _} <- {:emoticon, Evaluator.evaluate_emoticon(word), word},
+       {_, nil, _} <- {:word, Evaluator.evaluate_word(word), word},
+       do: {:neutral, 0, word}
+end
+```
+
+<!-- livebook:{"break_markdown":true} -->
+
+### Other
+
+Other control structure in Elixir:
+
+* https://www.geniokua.com/post/how-do-control-flows-work-in-elixir
+* https://elixirschool.com/en/lessons/basics/control_structures
+
+## Recursion
+
+We usually write this code to iterate over a list/array:
+
+```
+for (i = 0; i < sizeof(array); i++) {
+  write(i);
+}
+```
+
+This approach is not possible in functional programming like Elixir because of the nature of it. The `i` variable can not be mutated because variables are immutable. That is why we need to use recursion.
+
+```elixir
+defmodule Recursion do
+  @doc """
+  Returns count of the list
+
+  Example:
+    iex> Recursion.count(["a", "b", "c"])
+    3
+  """
+  def count([]), do: 0 # this is the base case
+  def count([_head | tail]), do: 1 + count(tail)
+
+  @doc """
+  Builds a list from n to 1
+
+  Example:
+    iex> Recursion.build(3)
+    [3, 2, 1]
+  """
+  def build(0), do: []
+  def build(n) do
+    [n | build(n-1)]
+  end
+end
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+{:module, Recursion, <<70, 79, 82, 49, 0, 0, 7, ...>>, {:build, 1}}
+```
+
+### Tail-Recursive With Accumulator
+
+The recursion examples above are recursive functions without an accumulator. The recursion builds up a stack of calls until it reaches the base case, and then the computation happens in reverse order (from the last step to the first). This is often referred to as post-order recursion.
+
+The `mark_list` function is written in tail-recursive style, where the computation happens during each step of the recursion, rather than waiting for the recursive calls to "return" values.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/veritaserum.ex
+
+defp mark_list([]), do: []
+
+defp mark_list([head | tail]) do
+  mark_list(tail, [mark_word(head)])
+end
+
+defp mark_list([head | tail], result) do
+  mark_list(tail, [mark_word(head) | result])
+end
+
+defp mark_list([], result), do: result
+```
+
+The `mark_list` function accepts a list of words. For each of the words, the function will call `mark_word` function which will return a tuple of the facet type, score, and the word itself. The result will be prepended to the result variable.
+
+These are the walk trough steps of the recursion:
+
+1. `mark_list(["the", "quality", "is", "great"])`
+
+2. `mark_list(["quality", "is", "great"], [mark_word("the")])`  
+   `result = [{:word, 0, "the"}]`
+
+3. `mark_list(["is", "great"], [mark_word("quality") | result])`  
+   `result = [{:word, 2, "quality"}, {:word, 0, "the"}]`
+
+4. `mark_list(["great"], [mark_word("is") | result])`  
+   `result = [{:word, 0, "is"}, {:word, 2, "quality"}, {:word, 0, "the"}]`
+
+5. `mark_list([], [mark_word("great") | result])`  
+   `result = [{:word, 3, "great"}, {:word, 0, "is"}, {:word, 2, "quality"}, {:word, 0, "the"}]`
+
+## Calling Erlang Functions
+
+One of the benefit of building Elixir on top of Erlang is an ability to use Erlang libraries. Elixir can call the Erlang function using the module name as an atom.
+
+Reference: https://elixirschool.com/en/lessons/intermediate/erlang
+
+The code snippet below shows a `clean` function that transforms the given text with rules. The fourth rule is replaces emoticon with a double space by calling Erlang function https://www.erlang.org/doc/apps/stdlib/binary.html#replace/4
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+# lib/veritaserum.ex
+
+defp clean(text) do
+    text
+    |> String.replace(~r/\n/, " ")
+    |> String.downcase()
+    |> String.replace(~r/[.,\/#!$%\^&\*;:{}=_`\"~()]/, " ")
+    |> :binary.replace(Evaluator.emoticon_list(), "  ", insert_replaced: 1)
+    |> String.replace(~r/ {2,}/, " ")
+end
+```
+
+```elixir
+defmodule Tranformer do
+  alias Veritaserum.Evaluator
+  
+  def replace_emoticon(text) do
+    :binary.replace(text, Evaluator.emoticon_list(), "  ", [:global, insert_replaced: 1])
+  end
+end
+
+# There is an issue with this function. 
+# Try using more than one emoticon, and see the result.
+Tranformer.replace_emoticon("Wow😦, I can 😦not believe it")
+
+#Wow😦, I can not believe it
+#Wow 😦 , I can not believe it
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+"Wow 😦 , I can  😦 not believe it"
+```
