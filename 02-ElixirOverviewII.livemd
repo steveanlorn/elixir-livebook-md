@@ -1,0 +1,503 @@
+# Building A Weather Stat Library
+
+## Overview
+
+Continuing my Elixir learning journey, I tried the Code Clinic challenge. Code Clinic is a series of courses in which authors solve the same problems using different programming languages. The first problem is to build a weather statistics library.
+
+The library will open a CSV file, parse the data, and compute the mean and median value for each of the weather fields. The raw data can be accessed from https://github.com/lyndadotcom/LPO_weatherdata.
+
+```
+-- raw data example:
+  date       time    	Air_Temp	Barometric_Press	Dew_Point	Relative_Humidity	Wind_Dir	Wind_Gust	Wind_Speed
+  2015_01_01 00:02:43	19.50	30.62	14.78	81.60	159.78	14.00	 9.20
+  2015_01_01 00:02:52	19.50	30.62	14.78	81.60	159.78	14.00	 9.20
+```
+
+This livebook will cover the highlights from the learning experience that I have not covered in the first Elixir overview livebook. The full code can be accessed here: https://github.com/steveanlorn/code-clinic-elixir.
+
+## Project Structure
+
+The library is created with [Mix tool](https://hexdocs.pm/elixir/introduction-to-mix.html).
+
+> Mix is a build tool that ships with Elixir that provides tasks for creating, compiling, testing your application, managing its dependencies, and much more.
+
+Mix will generate the default project structure. We put the main code inside the `lib` directory. I chose to structure the code this way:
+
+```
+lib
+├── lpo_stats <!-- all submodules goes here -->
+├── lpo_stats.ex <!-- entry of the lib: the main API -->
+└── util <!-- utility module -->
+```
+
+The main module name is `LPOStats`. The sub-module of it will be inside `lpo_stats` directory. The developer can expect to see all submodules of `LPOStats` in `lpo_stats` directory. This is aligned with the module path convention from  https://github.com/christopheradams/elixir_style_guide?tab=readme-ov-file#modules.
+
+## Struct
+
+I used struct data types to hold the weather data. In Elixir, structs are extensions built on top of maps that provide compile-time checks and default values. Structs provide compile-time guarantees that only the fields defined through `defstruct` will be allowed to exist in a struct. One module can only have one struct. By default, the default value will be [nil](https://hexdocs.pm/elixir/main/basic-types.html#booleans-and-nil).
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+defmodule LPOStats.Weather do
+  defstruct [
+    :date,
+    :time,
+    :air_temp,
+    :barometric_press,
+    :dew_point,
+    :relative_humidity,
+    wind_dir: 0.0, # example with user defined default value
+    wind_gust: 0.0,
+    wind_speed: 0.0
+  ]
+end
+```
+
+Creating a new struct:
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+%LPOStats.Weather {
+  air_temp: 19.50,
+  barometric_press: 30.62
+  # and so on...
+}
+```
+
+### Required Fields
+
+I wanted to make `:date` and `:time` as required fields. To do that, we need to use a special module attribute called `enforce_keys`. You still need to define the required fields in `defstruct`. I do not like repetition, so I combined the attributes using `++` operations (because they are list types). Creating a struct without the required fields will throw [ArgumentError](https://hexdocs.pm/elixir/ArgumentError.html).
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+@enforce_keys [
+  :date,
+  :time
+]
+
+defstruct @enforce_keys ++ [
+  # :date,
+  # :time,
+  :air_temp,
+  :barometric_press,
+  # and so on...
+]
+```
+
+### Struct Typespecs
+
+It is [recommended](https://hexdocs.pm/elixir/Kernel.html#defstruct/1-types) to define types for structs. By convention, such a type is called `t`. `__MODULE__` macro returns the current module name as an atom or nil otherwise. Then we can refer to this struct by using `LPOStats.Weather.t()` instead of `%LPOStats.Weather{}`.
+
+More about custom typespecs for custom type https://hexdocs.pm/elixir/1.12/typespecs.html#user-defined-types
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+@opaque t() :: %__MODULE__{
+  date: Date.t(),
+  time: Time.t(),
+  air_temp: float(),
+  barometric_press: float(),
+  # and so on...
+}
+```
+
+Instead of using `@type`, here I am using `@opaque`. The main reason because the weather struct definition is meant to be used within the `LPOStats` modules. The `docs` (later I will show you) won't tell you how that type is implemented, and that’s because you should treat those things as black-boxes. You’re not supposed to deconstruct or pattern-match a `LPOStats.Weather.t()`, you’re supposed to use the functions in the `LPOStats` module to work with it. ([ref](https://elixirforum.com/t/difference-between-type-and-opaque/41611/2))
+
+## Stream
+
+Stream is a mechanism to lazily process enumerable types. It processes one element at a time which resulting in a controllable memory consumption, which is preferable when dealing with a large amount of data.
+
+https://hexdocs.pm/elixir/enumerable-and-streams.html
+
+Below are two modules doing the same thing, but the latter uses `Stream`. You can run the code and see the difference.
+
+```elixir
+defmodule EagerExample do
+  def run do
+    1..10
+    |> Enum.map(&log_and_double/1)
+    |> Enum.filter(&log_and_filter_even/1)
+    |> Enum.take(5)
+  end
+
+  defp log_and_double(n) do
+    IO.puts("Doubling #{n}")
+    n * 2
+  end
+
+  defp log_and_filter_even(n) do
+    IO.puts("Filtering #{n}")
+    rem(n, 2) == 0
+  end
+end
+
+EagerExample.run
+```
+
+```elixir
+defmodule LazyExample do
+  def run do
+    1..10
+    |> Stream.map(&log_and_double/1)
+    |> Stream.filter(&log_and_filter_even/1)
+    |> Enum.take(5)
+  end
+
+  defp log_and_double(n) do
+    IO.puts("Doubling #{n}")
+    n * 2
+  end
+
+  defp log_and_filter_even(n) do
+    IO.puts("Filtering #{n}")
+    rem(n, 2) == 0
+  end
+end
+
+LazyExample.run
+```
+
+### File Stream
+
+Instead of using [read/1](https://hexdocs.pm/elixir/1.18.3/File.html#read/1) function, which will read all the content of the file at once, I decided to use [stream!/2](https://hexdocs.pm/elixir/1.18.3/File.html#stream!/2), which will read the file line by line (or by chunks of bytes). This ensures a consistent memory usage, especially when reading a large data set.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+def get_weathers!(file_path) do
+  file_path
+  |> File.stream!() # open the file and read the content line by line.
+  |> Stream.drop(1) # skip the first row (header).
+  |> Stream.map(&parse_line/1) # trimming, splitting, and building a construct
+  # repeat until all lines have been processed, then execute the last task.
+  |> Enum.to_list()
+end
+```
+
+## Error Handling
+
+Elixir has two ways of indicating a failure, one by raising an exception, second by returning the `:error` atom.
+
+https://elixirschool.com/en/lessons/intermediate/error_handling
+
+### Exception
+
+In the previous step, we read the file and convert it to the weather struct. The weather fields have float types, so we need to convert the string of float into float.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+String.to_float("19.50")
+```
+
+If the file is corrupted and gives us "19.5o" instead, then the parsing function will throw an `ArgumentError` exception.
+
+```elixir
+String.to_float("19.5o")
+```
+
+#### Try and Rescue
+
+We can use the `try` and `rescue` keywords to catch the exception. For example, we want to modify the error message to make it more verbose.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+try do
+  String.to_float(value)
+rescue
+  ArgumentError ->
+    raise ArgumentError,
+      message: "#{field} should be a textual representation of a float, but got: #{value}"
+end
+```
+
+<!-- livebook:{"break_markdown":true} -->
+
+### Error Atom
+
+In the context of a library, it is considered best practice to return an `:error` atom instead of throwing an exception, and let the user decide what to do with the failure. In this case, `load_weathers` function in the parent module will return a tuple of `{:error, Exception.t()}` instead of throwing an exception.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+defmodule LPOStats do
+  alias LPOStats.{Type, Weather, Stats}
+
+  @spec load_weathers(Path.t()) :: {:ok, list(Weather.t())} | {:error, Exception.t()}
+  def load_weathers(file_path) do
+    try do
+      {:ok, Weather.get_weathers!(file_path)}
+    rescue
+      exception -> {:error, exception}
+    end
+  end
+end
+```
+
+As a client, they can check the error by using pattern matching:
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+case load_weathers("data.csv") do
+  {:ok, weathers} ->
+    IO.inspect(weathers, label: "Loaded weather data")
+
+  {:error, %File.Error{} = e} ->
+    IO.puts("File error: #{e.reason}")
+
+  {:error, %ArgumentError{} = e} ->
+    IO.puts("Invalid input: #{e.message}")
+
+  {:error, e} ->
+    IO.puts("Unknown error: #{Exception.message(e)}")
+end
+```
+
+## Unit Test
+
+A test case is defined using [test macro](https://hexdocs.pm/ex_unit/1.18.1/ExUnit.Case.html#test/3). The evaluation of the result is done by using the [assert function](https://hexdocs.pm/ex_unit/1.18.1/ExUnit.Assertions.html#assert/2).
+
+I tried to make unit tests for `LPOStats` functions. The issue was a repeated testing code, as you can see below:
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+defmodule LPOStatsTest do
+  use ExUnit.Case
+
+  doctest LPOStats
+
+  test "air_temp stats should return correct result" do
+    file = Path.join(__DIR__, "testdata/test_data_for_get_stats.txt")
+    assert {:ok, weathers} = LPOStats.load_weathers(file)
+    
+    stats = LPOStats.get_air_temp(weathers)
+    mean = Float.round(stats.mean , 3)
+    assert(mean == 19.636, "unexpected mean value, got #{mean}")
+    assert(stats.median == 19.68, "unexpected median value, got #{stats.median}")
+  end
+
+  test "barometric_press stats should return correct result" do
+    file = Path.join(__DIR__, "testdata/test_data_for_get_stats.txt")
+    assert {:ok, weathers} = LPOStats.load_weathers(file)
+    
+    stats = LPOStats.get_barometric_press(weathers)
+    mean = Float.round(stats.mean , 3)
+    assert(mean == 30.612, "unexpected mean value, got #{mean}")
+    assert(stats.median == 30.61, "unexpected median value, got #{stats.median}")
+  end
+
+  # and so on for other functions ...
+end
+```
+
+### Test Setup
+
+To simplify the test, I want to load the weather data once and reuse it for all test cases. We can use [setup_all/1](https://hexdocs.pm/ex_unit/1.18.1/ExUnit.Callbacks.html#setup_all/1) to execute code before running the test case. Then, modify the test case to accept the weather map.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+defmodule LPOStatsTest do
+  use ExUnit.Case
+
+  doctest LPOStats
+
+  setup_all do
+    file = Path.join(__DIR__, "testdata/test_data_for_get_stats.txt")
+    assert {:ok, weathers} = LPOStats.load_weathers(file)
+    %{weathers: weathers}
+  end
+
+  test "air_temp stats should return correct result", %{weathers: weathers} do
+    stats = LPOStats.get_air_temp(weathers)
+    mean = Float.round(stats.mean , 3)
+    assert(mean == 19.636, "unexpected mean value, got #{mean}")
+    assert(stats.median == 19.68, "unexpected median value, got #{stats.median}")
+  end
+
+  test "barometric_press stats should return correct result", %{weathers: weathers} do
+    stats = LPOStats.get_barometric_press(weathers)
+    mean = Float.round(stats.mean , 3)
+    assert(mean == 30.612, "unexpected mean value, got #{mean}")
+    assert(stats.median == 30.61, "unexpected median value, got #{stats.median}")
+  end
+
+  # and so on for other functions ...
+end
+```
+
+### Dynamic Test Case
+
+We still have code repetition in executing the test. To reduce the code, I used meta-programming to generate the test case dynamically.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+defmodule LPOStatsTest do
+  use ExUnit.Case
+
+  doctest LPOStats
+
+  setup_all do
+    file = Path.join(__DIR__, "testdata/test_data_for_get_stats.txt")
+    assert {:ok, weathers} = LPOStats.load_weathers(file)
+    %{weathers: weathers}
+  end
+
+  @expected %{
+    air_temp: %{
+      mean: 19.636,
+      median: 19.68
+    },
+    barometric_press: %{
+      mean: 30.612,
+      median: 30.61
+    },
+    # ...
+  }
+
+  @stats LPOStats.Type.stats()
+
+  Enum.each(@stats, fn stat ->
+    test "#{stat} stats should return correct result", %{weathers: weathers} do
+      stats = apply(LPOStats, :"get_#{unquote(stat)}", [weathers])
+
+      expected = Map.fetch!(@expected, unquote(stat))
+      mean = Float.round(stats.mean, 3)
+
+      assert mean == expected.mean, "unexpected mean value, got #{mean}"
+      assert stats.median == expected.median, "unexpected median value, got #{stats.median}"
+    end
+  end)
+end
+```
+
+## Binary Pattern Matching
+
+I needed to convert `2015_01_01` string into `Date` type using [new!/4](https://hexdocs.pm/elixir/1.18.1/Date.html#new!/4) function. I needed to extract the year, month, and day. Elixir supports pattern matching based on the binary position.
+
+```elixir
+<<y::binary-size(4), "_", m::binary-size(2), "_", d::binary-size(2)>> = "2015_01_01"
+Date.new!(
+  String.to_integer(y),
+  String.to_integer(m),
+  String.to_integer(d)
+)
+```
+
+## Sigil
+
+If you read the library code, you will find the tilde (~) symbol in several places:
+
+* ~D[2015-01-01]
+* ~T[00:02:43]
+* ~r/\s+/
+
+That symbol is called a sigil. Sigils offer a more readable and compact way to represent data compared to using the underlying functions directly.
+
+```elixir
+Time.from_iso8601!("00:02:43") == ~T[00:02:43]
+```
+
+```elixir
+Regex.compile!("\\s+") == ~r/\s+/
+```
+
+```elixir
+~w(
+  air_temp
+  barometric_press
+  dew_point
+  relative_humidity
+  wind_dir
+  wind_gust
+  wind_speed
+)a
+```
+
+We can also create a custom sigil. In the example, I created a sigil to parse a string to an integer or a float.
+
+The `?` symbol in the sigil modifier represents a unicode code points: https://hexdocs.pm/elixir/binaries-strings-and-charlists.html#unicode-and-code-points
+
+```elixir
+defmodule MySigils do
+  def sigil_n(string, modifiers)
+
+  # Force float with modifier "f"
+  def sigil_n(string, [?f]) do
+    String.to_float(String.trim(string))
+  end
+
+  # Force integer with modifier "i"
+  def sigil_n(string, [?i]) do
+    String.to_integer(String.trim(string))
+  end
+
+  # Auto-detect number type
+  def sigil_n(string, []) do
+    case parse_number(string) do
+      {:ok, value} -> value
+      {:error, reason} -> raise ArgumentError, reason
+    end
+  end
+
+  defp parse_number(string) do
+    string = String.trim(string)
+
+    cond do
+      String.match?(string, ~r/^-?\d+$/) ->
+        {:ok, String.to_integer(string)}
+
+      String.match?(string, ~r/^-?\d+\.\d+$/) ->
+        {:ok, String.to_float(string)}
+
+      true ->
+        {:error, "Invalid numeric value: #{string}"}
+    end
+  end
+end
+```
+
+```elixir
+import MySigils
+
+~n"3.14"f == String.to_float("3.14")
+```
+
+## Comprehension
+
+In the library, I created a module called `LPOStats.Type`. The main purpose is to avoid writing the weather statistic fields repeatedly. TBH, this module is not necessary and makes the code harder to read, but anyway, it is fun to write for learning purposes.
+
+The module provides a centralized definition of weather fields that can be accessed via `stats/0` function. It also has `weather_struct_type/0` macro that will generate the typespecs for the weather struct dynamically.
+
+I built the list of fields by using [comprehensions](https://hexdocs.pm/elixir/1.18.1/Kernel.SpecialForms.html#for/1).
+Comprehensions allow you to quickly build a data structure from an enumerable or a bitstring.
+
+```elixir
+stats = ~w(
+  air_temp
+  barometric_press
+  dew_point
+  relative_humidity
+  wind_dir
+  wind_gust
+  wind_speed
+)a
+
+stat_fields = for stat <- stats do
+  {stat, quote(do: float())}
+end
+
+quote do
+  @opaque t :: %__MODULE__{
+    unquote_splicing(stat_fields)
+  }
+end
+```
