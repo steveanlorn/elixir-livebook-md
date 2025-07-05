@@ -1,0 +1,162 @@
+# Webpage Summarizer With LLM
+
+```elixir
+Mix.install([
+  {:floki, "~> 0.38.0"},
+  {:req, "~> 0.5.14"},
+  {:ollama, "~> 0.8.0"},
+  {:kino, "~> 0.16.0"}
+])
+```
+
+## Overview
+
+This is a simple webpage summarizer using LLM model. The model runs locally by using Ollama.
+
+### Project Dependencies
+
+* [Floki](https://hexdocs.pm/floki/readme.html) (HTML parser)
+* [Req](https://github.com/wojtekmach/req) (HTTP client)
+* [Ollama](https://github.com/lebrunel/ollama-ex) (Ollama library)
+* [Kino](https://github.com/livebook-dev/kino) (Render reach output for Livebook)
+
+### Prerequisite
+
+* Download [Ollama](https://ollama.com/)
+* Download your preferred [model](https://ollama.com/search). For example: `ollama pull deepseek-r1:8b`
+  * Be mindful of [the memory requirement](https://github.com/ollama/ollama/blob/c9e6d7719e91d0bfa3bc6e73ddce0f5c7c3c26f1/README.md?plain=1#L85).
+
+## Website Module
+
+This code is AI generated, with the prompt:
+
+```
+I want to run web scrapper in Elixir livebook.
+The output should be similar with the Phython I have below.
+Use existing library as much as possible.
+
+class Website:
+
+    def __init__(self, url):
+        """
+        Create this Website object from the given url using the BeautifulSoup library
+        """
+        self.url = url
+        response = requests.get(url, headers=headers)
+        soup = BeautifulSoup(response.content, 'html.parser')
+        self.title = soup.title.string if soup.title else "No title found"
+        for irrelevant in soup.body(["script", "style", "img", "input"]):
+            irrelevant.decompose()
+        self.text = soup.body.get_text(separator="\n", strip=True)
+```
+
+```elixir
+defmodule Website do
+  defstruct [:url, :title, :text]
+
+  @type t() :: %__MODULE__ {
+    url: String.t(),
+    title: String.t(),
+    text: String.t(),
+  }
+
+  @headers [
+    {"user-agent", "Mozilla/5.0"},
+    {"accept", "text/html"}
+  ]
+
+  def new(url) do
+    case Req.get(url, headers: @headers) do
+      {:ok, %{status: 200, body: body}} ->
+        {:ok, html_doc} = Floki.parse_document(body)
+        title = extract_title(html_doc)
+        text = extract_text(html_doc)
+        %__MODULE__{url: url, title: title, text: text}
+
+      {:error, reason} ->
+        IO.puts("Failed to fetch: #{inspect(reason)}")
+        %__MODULE__{url: url, title: "Request failed", text: ""}
+    end
+  end
+
+  defp extract_title(html_doc) do
+    case Floki.find(html_doc, "title") |> Floki.text() do
+      "" -> "No title found"
+      title -> title
+    end
+  end
+
+  defp extract_text(html_doc) do
+    # Remove script, style, img, input
+    clean_doc =
+      html_doc
+      |> Floki.traverse_and_update(fn
+        {"script", _, _} -> nil
+        {"style", _, _} -> nil
+        {"img", _, _} -> nil
+        {"video", _, _} -> nil
+        {"input", _, _} -> nil
+        {"nav", _, _} -> nil
+        other -> other
+      end)
+
+    body =
+      clean_doc
+      |> Floki.find("body")
+      |> Floki.text(sep: "\n")
+      |> String.trim()
+
+    body
+  end
+end
+```
+
+## Website Summarizer Module
+
+This code is AI generated, with the prompt:
+
+```
+Next, by using https://github.com/lebrunel/ollama-ex,
+I want to ask LLM to summarize the website content in markdown format.
+Then display that markdown information on livebook.
+```
+
+The original generated code was not working, so some fixes have been done.
+
+```elixir
+defmodule Website.Summarizer do
+  def summarize(website, model \\ "deepseek-r1:8b") do
+    prompt = """
+    You are an assistant that analyzes the contents of a website
+    and provides a short summary, ignoring text that might be navigation related.
+    Respond in markdown.
+
+    You are looking at a website titled "#{website.title}".
+    The contents of this website is as follows:
+
+    #{website.text}
+
+    Please provide a short summary of this website in markdown.
+    If it includes news or announcements, then summarize these too.
+    """
+
+    client = Ollama.init()
+    Ollama.completion(client, [
+      model: model,
+      prompt: prompt
+    ])
+    |> case do
+      {:ok, %{"response" => response}} -> response
+        |> String.replace(~r/<think>.*?<\/think>/s, "") # to exclude thinking block from R1 model.
+        |> String.trim()
+      {:error, reason} -> "LLM summarization failed: #{inspect(reason)}"
+    end
+  end
+end
+```
+
+```elixir
+site = Website.new("https://www3.nhk.or.jp/nhkworld/en/news/20250705_15/")
+markdown_summary = Website.Summarizer.summarize(site, "deepseek-r1:8b")
+Kino.Markdown.new(markdown_summary)
+```
