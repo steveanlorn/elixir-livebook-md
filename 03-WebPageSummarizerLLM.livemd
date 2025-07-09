@@ -1,3 +1,5 @@
+<!-- livebook:{"file_entries":[{"name":"web-page-summarizer.png","type":"attachment"}]} -->
+
 # Webpage Summarizer With LLM
 
 ```elixir
@@ -5,13 +7,18 @@ Mix.install([
   {:floki, "~> 0.38.0"},
   {:req, "~> 0.5.14"},
   {:ollama, "~> 0.8.0"},
-  {:kino, "~> 0.16.0"}
+  {:kino, "~> 0.16.0"},
+  {:openai_ex, "~> 0.9.12"}
 ])
 ```
 
 ## Overview
 
-This is a simple webpage summarizer using LLM model. The model runs locally by using Ollama.
+![](files/web-page-summarizer.png)
+
+<!-- livebook:{"break_markdown":true} -->
+
+This is a simple webpage summarizer using LLM model. The model runs locally by using Ollama or by using OpenAI.
 
 ### Project Dependencies
 
@@ -22,9 +29,15 @@ This is a simple webpage summarizer using LLM model. The model runs locally by u
 
 ### Prerequisite
 
+#### For Ollama
+
 * Download [Ollama](https://ollama.com/)
 * Download your preferred [model](https://ollama.com/search). For example: `ollama pull deepseek-r1:8b`
   * Be mindful of [the memory requirement](https://github.com/ollama/ollama/blob/c9e6d7719e91d0bfa3bc6e73ddce0f5c7c3c26f1/README.md?plain=1#L85).
+
+#### For OpenAI
+
+* Set the OpenAI token as ENV variable with name `OPENAI_API_KEY`.
 
 ## Website Module
 
@@ -51,31 +64,31 @@ class Website:
 ```
 
 ```elixir
-defmodule Website do
+defmodule WebPageSummarizer.Website do
   defstruct [:url, :title, :text]
 
   @type t() :: %__MODULE__ {
-    url: String.t(),
-    title: String.t(),
+    url: URI.t(),
+    title: binary(),
     text: String.t(),
   }
 
   @headers [
-    {"user-agent", "Mozilla/5.0"},
+    {"User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36"},
     {"accept", "text/html"}
   ]
 
-  def new(url) do
-    case Req.get(url, headers: @headers) do
-      {:ok, %{status: 200, body: body}} ->
-        {:ok, html_doc} = Floki.parse_document(body)
-        title = extract_title(html_doc)
-        text = extract_text(html_doc)
-        %__MODULE__{url: url, title: title, text: text}
+  @spec new!(URI.t()) :: t()
+  def new!(url) do
+    response = Req.get!(url, headers: @headers)
 
-      {:error, reason} ->
-        IO.puts("Failed to fetch: #{inspect(reason)}")
-        %__MODULE__{url: url, title: "Request failed", text: ""}
+    if response.status == 200 do
+      html_doc = Floki.parse_document!(response.body)
+      title = extract_title(html_doc)
+      text = extract_text(html_doc)
+      %__MODULE__{url: url, title: title, text: text}
+    else
+      raise "Unexpected HTTP status #{response.status} for URL: #{URI.to_string(url)}"
     end
   end
 
@@ -87,7 +100,7 @@ defmodule Website do
   end
 
   defp extract_text(html_doc) do
-    # Remove script, style, img, input
+    # Remove irrelevant elements
     clean_doc =
       html_doc
       |> Floki.traverse_and_update(fn
@@ -109,6 +122,7 @@ defmodule Website do
     body
   end
 end
+
 ```
 
 ## Website Summarizer Module
@@ -121,16 +135,42 @@ I want to ask LLM to summarize the website content in markdown format.
 Then display that markdown information on livebook.
 ```
 
-The original generated code was not working, so some fixes have been done.
+The original generated code was not working, so some fixes have been made.
+The OpenAI function is added manually.
 
 ```elixir
-defmodule Website.Summarizer do
-  def summarize(website, model \\ "deepseek-r1:8b") do
-    prompt = """
-    You are an assistant that analyzes the contents of a website
-    and provides a short summary, ignoring text that might be navigation related.
-    Respond in markdown.
+defmodule WebPageSummarizer do
+  alias OpenaiEx.Chat
+  alias OpenaiEx.ChatMessage
 
+  @open_ai_models ["gpt-4o-mini"]
+  @ollama_models ["deepseek-r1:8b", "phi3:3.8b"]
+
+  @system_prompt """
+  You are an assistant that analyzes the contents of a website
+  and provides a short summary, ignoring text that might be navigation related.
+  Respond in markdown.
+  """
+
+  @spec summarize!(URI.t(), binary(), binary()) :: binary()
+  def summarize!(url, model, apikey) do
+    website = WebPageSummarizer.Website.new!(url)
+
+    if model in @open_ai_models do
+      summarize_with_open_ai(website, model, apikey)
+    else
+      summarize_with_ollama(website, model)
+    end
+  end
+
+  @spec get_open_ai_models() :: [binary()]
+  def get_open_ai_models(), do: @open_ai_models
+
+  @spec get_ollama_models() :: [binary()]
+  def get_ollama_models(), do: @ollama_models
+
+  defp get_user_prompt(website) do
+    """
     You are looking at a website titled "#{website.title}".
     The contents of this website is as follows:
 
@@ -138,9 +178,41 @@ defmodule Website.Summarizer do
 
     Please provide a short summary of this website in markdown.
     If it includes news or announcements, then summarize these too.
+    Dont wrap the output in tripple backtick because I will render it as Markdown.
+    """
+  end
+
+  defp summarize_with_open_ai(website, model, apikey) do
+    openai = OpenaiEx.new(apikey)
+
+    chat_req =
+      Chat.Completions.new(
+        model: model,
+        messages: [
+          ChatMessage.system(@system_prompt),
+          ChatMessage.user(get_user_prompt(website))
+        ]
+      )
+
+    openai
+      |> Chat.Completions.create!(chat_req)
+      # for debugging
+      #    |> IO.inspect()
+      |> Map.get("choices")
+      |> List.first()
+      |> Map.get("message")
+      |> Map.get("content")
+  end
+
+  defp summarize_with_ollama(website, model) do
+    prompt = """
+    #{@system_prompt}
+
+    #{get_user_prompt(website)}
     """
 
     client = Ollama.init()
+
     Ollama.completion(client, [
       model: model,
       prompt: prompt
@@ -156,7 +228,29 @@ end
 ```
 
 ```elixir
-site = Website.new("https://www3.nhk.or.jp/nhkworld/en/news/20250705_15/")
-markdown_summary = Website.Summarizer.summarize(site, "deepseek-r1:8b")
-Kino.Markdown.new(markdown_summary)
+apikey = System.fetch_env!("LB_OPENAI_API_KEY")
+
+models = Enum.map(WebPageSummarizer.get_ollama_models(), fn model -> {model, model} end) ++ 
+  Enum.map(WebPageSummarizer.get_open_ai_models(), fn model -> {model, model} end)
+
+# Step 1: Create a form
+form = Kino.Control.form([
+  url: Kino.Input.url("Website URL"),
+  model: Kino.Input.select("Model", models)
+], submit: "Summarize!")
+
+# Step 2: Create an empty frame for output
+output = Kino.Frame.new()
+
+# Step 3: Setup listener
+Kino.listen(form, fn %{data: data} ->
+  Kino.Frame.render(output, Kino.Markdown.new("⏳ Summarizing..."))
+  result = WebPageSummarizer.summarize!(data.url, data.model, apikey)
+  Kino.Frame.render(output, Kino.Markdown.new(result))
+end)
+
+# Step 4: Render the form and output frame
+Kino.Layout.grid([form, output])
 ```
+
+<!-- livebook:{"offset":6870,"stamp":{"token":"XCP.bUJj_k-nAOTavlLRYuFjyppDsc8v0Ht5veKsSAxKuCFHPzUOElDjceI5HL95GF2aNPgpgisH0pA0SlpmUfUFhdcbdNz299b6pYQlvaprdf_kJ97nAFCnFJWSyGOn0HSUNIpTHJFDBz7IQw","version":2}} -->
